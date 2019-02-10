@@ -78,7 +78,7 @@ Socket socket = new Socket("127.0.0.1", 8080);
 ## How to organize network communication
 
 The most common way to communicate over the network is to use the [request-response pattern](https://en.wikipedia.org/wiki/Request%E2%80%93response).
-The client sends a message do the server and the server sends a reply.
+The client sends a message to the server and the server sends a reply.
 The client won't send a new message before receiving a reply for the previous one.
 The server never sends any non-reply messages to the client.
 
@@ -92,7 +92,7 @@ Using a sane syntax makes it easy to read and decode the received message bytes.
 Here's an example of network communication between a service that can register students to courses and a client.
 It uses the request-response pattern and the type-length-value (TLV) style syntax:
 * first byte of a message defines the message type
-* second byte is message length *N*
+* second byte is the message length *N*
 * next *N* bytes are the message value
 
 1) the client sends a byte array `[1,4,155,141,162,164]`.
@@ -105,6 +105,7 @@ It uses the request-response pattern and the type-length-value (TLV) style synta
 
 The main thing to consider when designing a syntax is to make it easy to decode.
 The decoder should never guess the size of the message or read until no data is left in the input stream.
+Sending the message type and length before the message helps with that.
 
 ### Avoid messages without syntax
 
@@ -139,7 +140,7 @@ byte[] value = baos.toByteArray();
 
 ### Use xml/json for more complex data structures
 
-When you need to send a more complicated object over the network, then manually encoding and decoding it into the message value can be quite annoying.
+When you need to send a more complicated object over the network, then manually encoding and decoding it to/from bytes can be quite annoying.
 Encode the object into a string using [gson](https://github.com/google/gson/blob/master/UserGuide.md#TOC-Object-Examples), then send the string as the message value.
 Gson can decode the string back into the object on the receiving side.
 The string should still be wrapped with the regular type-length-value syntax.
