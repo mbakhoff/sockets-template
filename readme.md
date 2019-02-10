@@ -127,15 +127,43 @@ Use the writeInt/readInt methods to send integers - the methods convert the inte
 The writeUTF method can be used to send a string - it encodes the string into bytes and automatically writes the length of the string before the encoded bytes.
 The readUTF method can use the same length prefix to know exactly how much to read.
 
-The ByteArrayOutputStream class can be used to build the message value in memory before sending it out:
+Writing a TLV message:
 ```
-var baos = new ByteArrayOutputStream();
-try (var out = new DataOutputStream(baos)) {
-  out.writeInt(123);
-  out.writeUTF("important");
+void writeMessage(DataOutputStream socketOut) throws Exception {
+  var buffer = new ByteArrayOutputStream();
+  try (var out = new DataOutputStream(buffer)) {
+    out.writeInt(123);
+    out.writeUTF("important");
+  }
+  int messageType = 1;
+  byte[] value = buffer.toByteArray();
+  socketOut.writeInt(messageType);
+  socketOut.writeInt(value.length);
+  socketOut.write(value);
 }
-byte[] value = baos.toByteArray();
-// send type, value.length, value
+```
+
+Reading a TLV message:
+```
+void readMessage(DataInputStream socketIn) throws Exception {
+  int type = socketIn.readInt();
+  int length = socketIn.readInt();
+  byte[] value = new byte[length];
+  socketIn.readFully(value); // useful method!
+  if (type == 1) {
+    processMessage1(value);
+  } else if (type == 2) {
+    processMessage2(value);
+  } else {
+    throw new IllegalArgumentException("type " + type);
+  }
+}
+
+void processMessage1(byte[] value) throws Exception {
+  DataInputStream dis = new DataInputStream(new ByteArrayInputStream(value));
+  int i123 = dis.readInt();
+  String important = dis.readUTF();
+}
 ```
 
 ### Use xml/json for more complex data structures
