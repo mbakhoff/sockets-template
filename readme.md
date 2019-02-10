@@ -90,7 +90,7 @@ Using a sane syntax makes it easy to read and decode the received message bytes.
 ### Example syntax
 
 Here's an example of network communication between a service that can register students to courses and a client.
-It uses the request-response pattern and the type-length-value (TLV) style syntax:
+It uses the request-response pattern and the **type-length-value (TLV)** style syntax:
 * first byte of a message defines the message type
 * second byte is the message length *N*
 * next *N* bytes are the message value
@@ -123,7 +123,7 @@ Using the request-response pattern and a proper syntax would resolve both issues
 ### Use data streams
 
 Java has the DataOutputStream and DataInputStream classes.
-Use the writeInt/readInt methods to send integers - the methods always write/read 4 bytes which makes it super useful for implementing the type/length syntax.
+Use the writeInt/readInt methods to send integers - the methods convert the integer to bytes and write exactly 4 bytes (useful for implementing the TLV syntax).
 The writeUTF method can be used to send a string - it encodes the string into bytes and automatically writes the length of the string before the encoded bytes.
 The readUTF method can use the same length prefix to know exactly how much to read.
 
@@ -156,8 +156,9 @@ The world is slowly moving to use these instead of IPv4.
 
 Some things to keep in mind when using IPv6 addresses:
 * leading zeros from any group can be removed
-* consecutive groups of zeroes can be omitted, but only once in an address
-* the address is often wrapped in brackets to avoid confusing the port number separator with the address group separators
+* consecutive groups of zeroes can be omitted.
+  this can only be done once in an address, otherwise it's impossible to reconstruct the address.
+* the address is often wrapped in brackets to avoid confusing the port number separator with the address group separators (both use `:`)
 
 For example, an URL containing the above address could be written as `https://[2001:db8::ff00:42:8329]:8443/`.
 Note that the three groups of zeros have been omitted and all leading zeros have been removed.
