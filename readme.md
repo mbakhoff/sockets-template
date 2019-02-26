@@ -56,7 +56,7 @@ Outgoing connections can be created in Java using the `Socket` class:
 ```java
 // connect to port 8080 of the local machine using the loopback address
 // note that 8080 is the "remote port". local port number is chosen automatically (randomly)
-try (Socket socket = new Socket("127.0.0.1", 8080)) {
+try (Socket socket = new Socket("localhost", 8080)) {
   // use the input/output streams here
 }
 ```
