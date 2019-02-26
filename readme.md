@@ -38,10 +38,12 @@ Incoming connections can be accepted in Java using the `ServerSocket` class:
 ```java
 int portNumber = 8080;
 // allocate port on all available IP addresses
-ServerSocket ss = new ServerSocket(portNumber);
-// wait for an incoming connection
-Socket socket = ss.accept();
-// use connection
+try (ServerSocket ss = new ServerSocket(portNumber)) {
+  // wait for an incoming connection
+  try (Socket socket = ss.accept()) {
+    // use connection
+  }
+}
 ```
 
 What's the difference between `Socket` and `ServerSocket`?
@@ -53,9 +55,10 @@ What's the difference between `Socket` and `ServerSocket`?
 Outgoing connections can be created in Java using the `Socket` class:
 ```java
 // connect to port 8080 of the local machine using the loopback address
-Socket socket = new Socket("127.0.0.1", 8080);
 // note that 8080 is the "remote port". local port number is chosen automatically (randomly)
-// use the input/output streams here
+try (Socket socket = new Socket("127.0.0.1", 8080)) {
+  // use the input/output streams here
+}
 ```
 
 ## Tips and tricks
