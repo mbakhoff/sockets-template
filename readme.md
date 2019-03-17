@@ -3,7 +3,7 @@
 TCP sockets enable communication between programs within the same machine or across different machines.
 Data can be sent/received using the regular Java OutputStream/InputStream.
 
-```java
+```
 Socket s = connect();
 InputStream in = s.getInputStream();
 OutputStream out = s.getOutputStream();
@@ -35,7 +35,7 @@ Different owners (programs) can own different mailboxes in a building (IP).
 When a message arrives at some building (IP), the house keeper (operating system) will deliver the message to the right mailbox (program) by looking at the mailbox number (port number).
 
 Incoming connections can be accepted in Java using the `ServerSocket` class:
-```java
+```
 int portNumber = 8080;
 // allocate port on all available IP addresses
 try (ServerSocket ss = new ServerSocket(portNumber)) {
@@ -53,7 +53,7 @@ What's the difference between `Socket` and `ServerSocket`?
   It is defined by its { local ip, local port, remote ip, remote port } quadruple.
 
 Outgoing connections can be created in Java using the `Socket` class:
-```java
+```
 // connect to port 8080 of the local machine using the loopback address
 // note that 8080 is the "remote port". local port number is chosen automatically (randomly)
 try (Socket socket = new Socket("localhost", 8080)) {
@@ -87,87 +87,111 @@ The server never sends any non-reply messages to the client.
 
 Another important aspect in communication is the message syntax.
 A socket only provides the input/output streams that transfer bytes.
-The syntax describes how the data is encoded into message bytes.
-Using a sane syntax makes it easy to read and decode the received message bytes.
+The syntax describes how the data is encoded into bytes so it can be later reconstructed.
 
 ### Example syntax
 
 Here's an example of network communication between a service that can register students to courses and a client.
-It uses the request-response pattern and the **type-length-value (TLV)** style syntax:
-* first byte of a message defines the message type
-* second byte is the message length *N*
-* next *N* bytes are the message value
+The first byte of a message contains the message type.
+The next bytes contain the message content depending on the message type.
 
 1) the client sends a byte array `[1,4,155,141,162,164]`.
-   the type is set to 1 (new registration).
-   the message length is set to 4.
-   the following next 4 bytes contain the UTF-8 encoded string "mart" as the message value.
-2) the server responds with bytes `[2,0]`, where the type is set to 2 (registration ok) and message length is set to zero.
-   alternatively the server could respond with `[3,228,..]`, where the type is set to 3 (registration error), length is set to 228 and the next 228 bytes contain an UTF-8 encoded error string.
+   the first byte shows the message type `1` for "new registration".
+   the second byte `4` is the length of the student's name, followed by 4 bytes `[155,141,162,164]` for a UTF-8 encoded string "mart".
+2) the server responds with a single byte `[2]` - the message type for "registration ok".
+   alternatively the server could respond with `[3,155,..]`, where the type `3` is for "registration error", followed by `155` for error length, followed by 155 bytes containing the bytes for the error string.
 3) the client sends a new message..
 
-The main thing to consider when designing a syntax is to make it easy to decode.
-The decoder should never guess the size of the message or read until no data is left in the input stream.
-Sending the message type and length before the message helps with that.
+The key to a good syntax is to add a length prefix to every variable length piece of data.
+Otherwise the receiver will have no way of knowing how much it needs to read.
 
-### Avoid messages without syntax
+### Using data streams
 
-The most common pitfall is to try to write a chat program that just reads a string from `System.in` and writes it to a network stream.
-The other side of the connection reads messages and prints them out.
-At the same time it also reads strings from `System.in` and sends them back to the other.
+Java has the DataOutputStream and DataInputStream classes with many useful helper methods.
+Make use of them!
 
-It's a simple program and it kind of works.
-The problems quickly become apparent when the program must be modifed to do anything non-trivial, e.g. transfer a file.
-If the sender just dumps the file content to the network stream, then the receiver has no way to differentiate it from a regular text message.
-Receiving a confirmation of successful transfer from the destination is even harder.
-Again there is no way to differentiate the confirmation message from a regular text message (or a file transfer started from the other side).
-Using the request-response pattern and a proper syntax would resolve both issues.
+Sending strings is one of the most common operation.
+Let's take a look on how it could be done using data streams.
 
-### Use data streams
-
-Java has the DataOutputStream and DataInputStream classes.
-Use the writeInt/readInt methods to send integers - the methods convert the integer to bytes and write exactly 4 bytes (useful for implementing the TLV syntax).
-The writeUTF method can be used to send a string - it encodes the string into bytes and automatically writes the length of the string before the encoded bytes.
-The readUTF method can use the same length prefix to know exactly how much to read.
-
-Writing a TLV message:
 ```
-void writeMessage(DataOutputStream socketOut) throws Exception {
-  var buffer = new ByteArrayOutputStream();
-  try (var out = new DataOutputStream(buffer)) {
-    out.writeInt(123);
-    out.writeUTF("important");
-  }
-  int messageType = 1;
-  byte[] value = buffer.toByteArray();
-  socketOut.writeInt(messageType);
-  socketOut.writeInt(value.length);
-  socketOut.write(value);
+void writeStrings(DataOutputStream out) throws Exception {
+  // bad example; don't do this!
+  byte[] m1bytes = "message1".getBytes("UTF-8");
+  byte[] m2bytes = "message2".getBytes("UTF-8");
+  out.write(m1bytes);
+  out.write(m2bytes);
 }
 ```
 
-Reading a TLV message:
+This code successfully sends two strings to the output stream.
+However, how can the receiver reconstruct this data?
+How could they find out where one string ends and another starts?
+There is not way to make such approach work reliably.
+The solution is to **send a length prefix** before each variable length piece of data.
+
 ```
-void readMessage(DataInputStream socketIn) throws Exception {
-  int type = socketIn.readInt();
-  int length = socketIn.readInt();
-  byte[] value = new byte[length];
-  socketIn.readFully(value); // useful method!
-  if (type == 1) {
-    processMessage1(value);
-  } else if (type == 2) {
-    processMessage2(value);
+void myWriteUTF(DataOutputStream out, String str) throws Exception {
+  byte[] encoded = str.getBytes("UTF-8"); // always specify encoding
+  out.writeInt(encoded.length); // int is always exactly 4 bytes
+  out.write(encoded);
+}
+
+String myReadUTF(DataInputStream in) throws Exception {
+  int length = in.readInt(); // read exactly 4 bytes
+  byte[] encoded = in.readNBytes(length); // useful method!
+  return new String(encoded, "UTF-8");
+}
+```
+
+The above methods are so commonly needed that they were built into the data stream classes.
+The above could be replaced with simply `out.writeUTF(str)` and `in.readUTF()`.
+
+Datastreams make it easy to write more complex messages as well.
+Sending a request to get a student's grade for a course:
+```
+static final int TYPE_GET_GRADE = 4;
+
+void sendGetGradeRequest(DataOutputStream out, String studentId, int courseId) throws Exception {
+  out.writeInt(TYPE_GET_GRADE);
+  out.writeUTF(studentId);
+  out.writeInt(courseId);
+}
+```
+
+Reading the request on the server side:
+```
+static final int TYPE_GET_GRADE = 4;
+static final int TYPE_GRADE_OK = 5;
+static final int TYPE_GRADE_ERROR = 6;
+
+void processRequest(DataInputStream in, DataOutputStream out) throws Exception {
+  int type = in.readInt();
+  if (type == TYPE_GET_GRADE) {
+    processGetGrade(in, out);
   } else {
-    throw new IllegalArgumentException("type " + type);
+    throw new RuntimeException("unknown type " + type);
   }
 }
 
-void processMessage1(byte[] value) throws Exception {
-  DataInputStream dis = new DataInputStream(new ByteArrayInputStream(value));
-  int i123 = dis.readInt();
-  String important = dis.readUTF();
+void processGetGrade(DataInputStream in, DataOutputStream out) throws Exception {
+  String studentId = in.readUTF();
+  int courseId = in.readInt();
+  if (hasCompletedCourse(studentId, courseId)) {
+    out.writeInt(TYPE_GRADE_OK);
+    out.writeDouble(getGrade(studentId, courseId));
+  } else {
+    out.writeInt(TYPE_GRADE_ERROR);
+  }
 }
 ```
+
+A few issues to avoid:
+* instead of `writeUTF(name + ";" + description)` use `writeUTF(name); writeUTF(description);`.
+  this way there's no need split the strings manually and the code also works with names that include the `;` symbol.
+* instead of `writeUTF(Integer.toString(123))` use `writeInt(123)`.
+  always try to use the right type and avoid unnecessary string conversions.
+* use `writeInt(123)` instead if `write(123)`.
+  the parameter of `write` is an int (4 bytes), but it only sends a single byte (wtf java).
 
 ### Use xml/json for more complex data structures
 
